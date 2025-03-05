@@ -465,7 +465,7 @@ class _MIoTSpecBase:
     iid: int
     type_: str
     description: str
-    description_trans: str
+    description_trans: Optional[str]
     proprietary: bool
     need_filter: bool
     name: str
@@ -476,6 +476,7 @@ class _MIoTSpecBase:
     device_class: Any
     state_class: Any
     external_unit: Any
+    entity_category: Optional[str]
 
     spec_id: int
 
@@ -494,6 +495,7 @@ class _MIoTSpecBase:
         self.device_class = None
         self.state_class = None
         self.external_unit = None
+        self.entity_category = None
 
         self.spec_id = hash(f'{self.type_}.{self.iid}')
 
