@@ -69,6 +69,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry,
     device_list: list[MIoTDevice] = hass.data[DOMAIN]['devices'][
         config_entry.entry_id]
 
+    # 读取配置参数
+    close_threshold = config_entry.options.get('close_threshold', 3)
+    open_threshold = config_entry.options.get('open_threshold', 95)
+
     new_entities = []
     for miot_device in device_list:
         for data in miot_device.entity_list.get('cover', []):
@@ -81,7 +85,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry,
             elif data.spec.name == 'airer':
                 data.spec.device_class = CoverDeviceClass.BLIND
             new_entities.append(Cover(miot_device=miot_device,
-                                      entity_data=data))
+                                      entity_data=data,
+                                      close_threshold=close_threshold,
+                                      open_threshold=open_threshold))
 
     if new_entities:
         async_add_entities(new_entities)
@@ -104,7 +110,9 @@ class Cover(MIoTServiceEntity, CoverEntity):
     _prop_position_value_range: Optional[int]
 
     def __init__(self, miot_device: MIoTDevice,
-                 entity_data: MIoTEntityData) -> None:
+                 entity_data: MIoTEntityData,
+                 close_threshold: int = 3,
+                 open_threshold: int = 95) -> None:
         """Initialize the Cover."""
         super().__init__(miot_device=miot_device, entity_data=entity_data)
         self._attr_device_class = entity_data.spec.device_class
@@ -123,6 +131,9 @@ class Cover(MIoTServiceEntity, CoverEntity):
         self._prop_current_position = None
         self._prop_target_position = None
         self._prop_position_value_range = None
+
+        self._close_threshold = close_threshold
+        self._open_threshold = open_threshold
 
         # properties
         for prop in entity_data.props:
@@ -214,12 +225,24 @@ class Cover(MIoTServiceEntity, CoverEntity):
             # Assume that the current position is the same as the target
             # position when the current position is not defined in the device's
             # MIoT-Spec-V2.
-            return None if (self._prop_target_position
-                            is None) else self.get_prop_value(
-                                prop=self._prop_target_position)
-        pos = self.get_prop_value(prop=self._prop_current_position)
-        return None if pos is None else round(pos * 100 /
-                                              self._prop_position_value_range)
+            pos = None if (self._prop_target_position is None) else self.get_prop_value(
+                prop=self._prop_target_position)
+        else:
+            pos = self.get_prop_value(prop=self._prop_current_position)
+
+        if pos is None:
+            return None
+
+        # Convert the position to a percentage
+        percentage = round(pos * 100 / self._prop_position_value_range)
+
+        # Adjust the position to 0 if it is below the close threshold
+        if percentage <= self._close_threshold:
+            return 0
+                # Adjust the position to 0 if it is below the close threshold
+        if percentage >= self._open_threshold:
+            return 100
+        return percentage
 
     @property
     def is_opening(self) -> Optional[bool]:
